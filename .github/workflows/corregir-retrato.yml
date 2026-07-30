@@ -1,0 +1,81 @@
+name: Corregir retrato nítido
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/corregir-retrato.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  corregir:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Aplicar retrato completo
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('index.html')
+          html = path.read_text(encoding='utf-8')
+
+          hero = '<img class="portrait-full" src="assets/rodrigo-web.jpg?v=4" alt="Rodrigo Rojas Andrade" width="900" height="1200" fetchpriority="high" decoding="async">'
+          bio = '<img class="portrait-full" src="assets/rodrigo-web.jpg?v=4" alt="Retrato de Rodrigo Rojas Andrade" width="900" height="1200" loading="lazy" decoding="async">'
+
+          html = re.sub(r'<img\s+src="assets/rodrigo-web\.jpg\?v=3"\s+alt="Rodrigo Rojas Andrade"[^>]*>', hero, html, count=1)
+          html = re.sub(r'<img\s+src="assets/rodrigo-web\.jpg\?v=3"\s+alt="Retrato de Rodrigo Rojas Andrade"[^>]*>', bio, html, count=1)
+
+          if '.portrait-full{' not in html:
+              html = html.replace('</head>', '''<style>
+          .portrait-full{opacity:0;transition:opacity .22s ease}
+          .portrait-full.is-ready{opacity:1}
+          </style>
+          </head>''', 1)
+
+          if 'loadFullPortrait' not in html:
+              loader = r'''<script>
+          async function loadFullPortrait(){
+            const images=[...document.querySelectorAll('.portrait-full')];
+            try{
+              const paths=[
+                'assets/portrait-webp/part-00.txt',
+                'assets/portrait-webp/part-01.txt',
+                'assets/portrait-webp/part-02.txt',
+                'assets/portrait-webp/part-03.txt',
+                'assets/portrait-webp/part-04.txt'
+              ];
+              const parts=await Promise.all(paths.map(async file=>{
+                const response=await fetch(file,{cache:'no-store'});
+                if(!response.ok) throw new Error('No se pudo cargar '+file);
+                return (await response.text()).trim();
+              }));
+              const source='data:image/webp;base64,'+parts.join('');
+              images.forEach(image=>{
+                image.onload=()=>image.classList.add('is-ready');
+                image.src=source;
+              });
+            }catch(error){
+              console.error('No se pudo cargar el retrato completo',error);
+              images.forEach(image=>image.classList.add('is-ready'));
+            }
+          }
+          loadFullPortrait();
+          </script>
+          '''
+              html = html.replace('</body>', loader + '</body>', 1)
+
+          path.write_text(html, encoding='utf-8')
+
+      - name: Publicar corrección
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet || git commit -m "Reconstruir retrato nítido en la página"
+          git push
