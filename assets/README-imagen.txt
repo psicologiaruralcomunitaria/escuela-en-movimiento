@@ -1,0 +1,1 @@
+Fotografía principal optimizada para web.
